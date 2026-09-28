@@ -5,27 +5,32 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Red Hat Certification Map</title>
   <link rel="icon" type="image/png" href="redhat-favicon.png">
-  <script>(function(){var t=localStorage.getItem('redhat-cert-map-theme'),d;if(t==='dark')d=true;else if(t==='light')d=false;else d=window.matchMedia&&window.matchMedia('(prefers-color-scheme:dark)').matches;if(d){document.documentElement.classList.add('pf-v6-theme-dark');document.documentElement.setAttribute('data-theme','dark');}else{document.documentElement.classList.remove('pf-v6-theme-dark');document.documentElement.setAttribute('data-theme','light');}})();</script>
-  <link rel="stylesheet" href="https://unpkg.com/@patternfly/patternfly@6.4.0/patternfly.min.css">
-  <link rel="stylesheet" href="https://unpkg.com/@patternfly/patternfly@6.4.0/patternfly-addons.css">
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Red+Hat+Mono:wght@400;600&family=Red+Hat+Text:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css">
+  <script>(function(){var t=null;try{t=localStorage.getItem('redhat-cert-map-theme');}catch(e){}var d;if(t==='dark')d=true;else if(t==='light')d=false;else d=window.matchMedia&&window.matchMedia('(prefers-color-scheme:dark)').matches;if(d){document.documentElement.classList.add('pf-v6-theme-dark');document.documentElement.setAttribute('data-theme','dark');}else{document.documentElement.classList.remove('pf-v6-theme-dark');document.documentElement.setAttribute('data-theme','light');}})();</script>
+  <link rel="stylesheet" href="https://unpkg.com/@patternfly/patternfly@6.4.0/patternfly.min.css" integrity="sha384-N3ZPc5bcsHYetozTiTDhKR5Y22G41thR1xe6i33nRwrRWKeqA8xUf2KIqPhDLGkH" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://unpkg.com/@patternfly/patternfly@6.4.0/patternfly-addons.css" integrity="sha384-SwrXvVGdTLV+csH7h+LHx2xLxXvc4jnr7YRDo4ZaBSUhC/JCn+MgiOOhCAvGQrjE" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" integrity="sha384-t1nt8BQoYMLFN5p42tRAtuAAFQaCQODekUVeKKZrEnEyp4H2R0RHFz0KWpmj7i8g" crossorigin="anonymous">
   <script>
     (function() {
       var KEY = "rh-cert-map-version";
+      var version = sessionStorage.getItem(KEY) || "";
+      window.__rhCertMapVersion = version;
+
+      function asset(path) {
+        return version ? path + "?v=" + encodeURIComponent(version) : path;
+      }
+
+      var link = document.createElement("link");
+      link.rel = "stylesheet";
+      link.href = asset("style.css");
+      document.head.appendChild(link);
+
       fetch("version.txt?t=" + Date.now())
         .then(function(r) { return r.text(); })
         .then(function(v) {
           var latest = v.trim();
-          var cached = sessionStorage.getItem(KEY);
-          if (cached && cached !== latest) {
+          if (latest && latest !== version) {
             sessionStorage.setItem(KEY, latest);
             location.reload();
-          } else {
-            sessionStorage.setItem(KEY, latest);
           }
         })
         .catch(function() {});
@@ -33,12 +38,12 @@
   </script>
 </head>
 <body>
-  <div class="pf-v6-c-page pf-m-sidebar-expanded">
+  <div class="pf-v6-c-page cert-map-page pf-m-sidebar-expanded">
     <!-- Masthead -->
     <header class="pf-v6-c-masthead">
       <div class="pf-v6-c-masthead__main">
         <span class="pf-v6-c-masthead__toggle">
-          <button class="pf-v6-c-button pf-m-plain" type="button" aria-label="Toggle navigation" id="nav-toggle">
+          <button class="pf-v6-c-button pf-m-plain" type="button" aria-label="Toggle navigation" id="nav-toggle" aria-expanded="true" aria-controls="page-sidebar">
             <i class="fas fa-bars"></i>
           </button>
         </span>
@@ -121,7 +126,7 @@
     <!-- Main Content Area -->
     <main class="pf-v6-c-page__main" id="main-content">
       <section class="pf-v6-c-page__main-section">
-        <div class="pf-v6-c-title pf-m-lg pf-v6-u-mb-md">Certification Map</div>
+        <h1 class="pf-v6-c-title pf-m-lg pf-v6-u-mb-md">Certification Map</h1>
         <div id="cert-map"></div>
 
         <!-- Old Credentials table -->
@@ -154,6 +159,9 @@
             <tbody></tbody>
           </table>
         </div>
+        <footer class="site-footer">
+          Vibe coded by <a href="https://github.com/w4hf" target="_blank" rel="noopener noreferrer">Hamza (w4hf)</a> - <a href="https://github.com/w4hf/rh-cert-map" target="_blank" rel="noopener noreferrer">Github Repo</a> - 2026
+        </footer>
       </section>
     </main>
   </div>
@@ -161,10 +169,19 @@
   <!-- Tooltip -->
   <div id="tooltip" class="cert-tooltip" aria-hidden="true"></div>
 
-  <footer class="site-footer">
-    Vibe coded by <a href="https://github.com/w4hf" target="_blank" rel="noopener noreferrer">Hamza (w4hf)</a> - <a href="https://github.com/w4hf/rh-cert-map" target="_blank" rel="noopener noreferrer">Github Repo</a> - 2026
-  </footer>
-
-  <script src="app.js"></script>
+  <script>
+    (function() {
+      var version = window.__rhCertMapVersion || "";
+      function asset(path) {
+        return version ? path + "?v=" + encodeURIComponent(version) : path;
+      }
+      ["cert-logic.js", "app.js"].forEach(function(path) {
+        var script = document.createElement("script");
+        script.src = asset(path);
+        script.async = false;
+        document.body.appendChild(script);
+      });
+    })();
+  </script>
 </body>
 </html>

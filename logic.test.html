@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Certification logic tests</title>
+</head>
+<body>
+  <pre id="out">Running…</pre>
+  <script src="cert-logic.js"></script>
+  <script>
+    (function () {
+      "use strict";
+      var CL = window.CertLogic;
+      var failures = [];
+
+      function check(name, actual, expected) {
+        var ok = JSON.stringify(actual) === JSON.stringify(expected);
+        if (!ok) failures.push(name + "\n  actual   " + JSON.stringify(actual) + "\n  expected " + JSON.stringify(expected));
+      }
+
+      var anyPass = CL.evaluateLevel({ type: "any", codes: ["EX180", "EX156"] }, new Set(["EX156"]), {});
+      check("any passes one code", anyPass, { achieved: true, progress: 1 });
+      var allPartial = CL.evaluateLevel({ type: "all", codes: ["EX280", "EX380"] }, new Set(["EX280"]), {});
+      check("all reports partial progress", allPartial, { achieved: false, progress: 0.5 });
+
+      var metaResults = { sysadm: { achieved: true }, advsysadm: { achieved: false } };
+      var meta = CL.evaluateLevel({ type: "meta", requires: ["sysadm", "advsysadm"] }, new Set(), metaResults);
+      check("meta waits for every requirement", meta, { achieved: false, progress: 0.5 });
+
+      var architectRule = {
+        type: "metaPlus",
+        requires: ["engineer"],
+        specialist: ["EX210", "EX260", "EX358"],
+        minSpecialist: 3,
+      };
+      var architect = CL.evaluateLevel(architectRule, new Set(["EX210", "EX260", "EX358"]), { engineer: { achieved: true } });
+      check("architect achieved with engineer and 3 specialists", architect.achieved, true);
+
+      var products = [{
+        name: "Enterprise Linux",
+        nodes: [
+          { id: "sysadm", name: "System Administrator", rule: { type: "all", codes: ["EX200"] } },
+          { id: "advsysadm", name: "Advanced System Administrator", rule: { type: "all", codes: ["EX342"] } },
+          { id: "engineer", name: "Engineer", rule: { type: "meta", requires: ["sysadm", "advsysadm"] } },
+          { id: "specialist", name: "Specialist", rule: { type: "any", codes: ["EX210", "EX442"] } },
+          { id: "architect", name: "Architect", rule: { type: "metaPlus", requires: ["engineer"], minSpecialist: 3 } },
+        ],
+      }, {
+        name: "AI",
+        nodes: [
+          { id: "dev", name: "Developer", rule: { type: "all", codes: ["EX267"] } },
+        ],
+      }];
+      CL.bindArchitectSpecialists(products);
+      check("architect specialist list comes from the specialist node", products[0].nodes[4].rule.specialist, ["EX210", "EX442"]);
+
+      var exams = [
+        { code: "EX267", name: "Red Hat Certified Developer in AI" },
+        { code: "EX188", name: "Red Hat Certified Developer in Cloud-native Applications" },
+        { code: "EX200", name: "Red Hat Certified System Administrator (RHCSA)" },
+      ];
+      var aliases = { "red hat certified specialist in ansible automation": "EX294" };
+      var aiMatch = CL.matchCredentialsToExams(
+        [{ name: "Red Hat Certified Developer in AI" }],
+        exams,
+        aliases
+      );
+      check("AI credential matches EX267", Array.from(aiMatch.matched), ["EX267"]);
+
+      var genericDev = CL.matchCredentialsToExams(
+        [{ name: "Red Hat Certified Developer" }],
+        exams,
+        aliases
+      );
+      check("generic developer does not match the AI exam", genericDev.unmatched.length, 1);
+
+      var aliasMatch = CL.matchCredentialsToExams(
+        ["Red Hat Certified Specialist in Ansible Automation"],
+        exams,
+        aliases
+      );
+      check("alias maps to its exam code", Array.from(aliasMatch.matched), ["EX294"]);
+      check("a name-only credential has no expiry", aliasMatch.expiryByCode, {});
+
+      var dated = CL.matchCredentialsToExams(
+        [
+          { name: "Red Hat Certified Developer in AI", expiry: "September 1, 2028" },
+          { name: "Red Hat Certified Explorer", expiry: "January 1, 2029" },
+        ],
+        exams,
+        aliases
+      );
+      check("a matched credential keeps its expiry date", dated.expiryByCode, { EX267: "September 1, 2028" });
+
+      var advancedName = "Red Hat Certified Advanced System Administrator in Enterprise Linux";
+      var kept = CL.filterAchievedCredentials([{ name: advancedName }], products, new Set(["EX200"]));
+      check("advanced credential stays when only sysadmin is achieved", kept.map(function (c) { return c.name; }), [advancedName]);
+      var hidden = CL.filterAchievedCredentials([{ name: advancedName }], products, new Set(["EX200", "EX342"]));
+      check("advanced credential hides when that level is achieved", hidden, []);
+
+      var containers = CL.filterAchievedCredentials(
+        [{ name: "Red Hat Certified Specialist in Containers" }],
+        products,
+        new Set(["EX267"])
+      );
+      check("containers credential is not treated as AI", containers.length, 1);
+
+      check("unknown exam title is its own group", CL.getExamLevel("Red Hat Certified Explorer in Satellite"), "Other");
+      check("specialist titles stay specialists", CL.getExamLevel("Red Hat Certified Specialist in Containers"), "Specialist");
+
+      var words = CL.wordSet("red hat certified developer in ai");
+      check("AI survives word splitting", words.has("ai"), true);
+      check("stopword in is dropped", words.has("in"), false);
+
+      var junk = new DOMParser().parseFromString("<html><body>" + "proxy error ".repeat(40) + "</body></html>", "text/html");
+      check("junk page is not a verify document", CL.isRedHatVerifyDocument(junk), false);
+      var verifyDoc = new DOMParser().parseFromString("<html><body><table><tr><td>Owner:</td><td>Ada</td></tr></table><h3>Current Credentials</h3></body></html>", "text/html");
+      check("owner and current credentials qualify", CL.isRedHatVerifyDocument(verifyDoc), true);
+
+      var out = document.getElementById("out");
+      if (failures.length) {
+        out.textContent = failures.length + " failed\n\n" + failures.join("\n\n");
+        document.title = "FAIL";
+      } else {
+        out.textContent = "All logic tests passed";
+        document.title = "PASS";
+      }
+    })();
+  </script>
+</body>
+</html>

@@ -1,33 +1,17 @@
 (function () {
   "use strict";
 
-  // ── Data ──────────────────────────────────────────────────────────────────
+  const {
+    evaluateProduct,
+    bindArchitectSpecialists,
+    normalizeCredName,
+    matchCredentialsToExams: matchCredentialsAgainst,
+    filterAchievedCredentials: filterAchievedAgainst,
+    getExamLevel,
+    isRedHatVerifyDocument,
+  } = window.CertLogic;
 
-  // Rule types: "any" = pass any one, "all" = pass all, "meta" = requires other nodes achieved,
-  // "metaPlus" = requires nodes achieved + minimum specialist exams passed
-  function evaluateLevel(rule, p, nodeResults) {
-    if (rule.type === "any") {
-      const achieved = rule.codes.some((c) => p.has(c));
-      return { achieved, progress: achieved ? 1 : 0 };
-    }
-    if (rule.type === "all") {
-      const count = rule.codes.filter((c) => p.has(c)).length;
-      return { achieved: count === rule.codes.length, progress: count / rule.codes.length };
-    }
-    if (rule.type === "meta") {
-      const total = rule.requires.length;
-      const done = rule.requires.filter((id) => nodeResults && nodeResults[id] && nodeResults[id].achieved).length;
-      return { achieved: done === total, progress: total > 0 ? done / total : 0 };
-    }
-    if (rule.type === "metaPlus") {
-      const reqDone = rule.requires.filter((id) => nodeResults && nodeResults[id] && nodeResults[id].achieved).length;
-      const specDone = Math.min(rule.minSpecialist, rule.specialist.filter((c) => p.has(c)).length);
-      const total = rule.requires.length + rule.minSpecialist;
-      const achieved = reqDone === rule.requires.length && specDone >= rule.minSpecialist;
-      return { achieved, progress: Math.min(1, (reqDone + specDone) / total) };
-    }
-    return { achieved: false, progress: 0 };
-  }
+  // ── Data ──────────────────────────────────────────────────────────────────
 
   const PRODUCTS = [
     {
@@ -38,7 +22,7 @@
         { id: "advsysadm", name: "Advanced System Administrator", col: 1, row: "lower", type: "credential", rule: { type: "all", codes: ["EX380"] }, hint: "Pass EX380" },
         { id: "engineer", name: "Engineer", col: 2, row: "upper", type: "meta", rule: { type: "meta", requires: ["sysadm", "advsysadm"] }, hint: "Achieve System Administrator + Advanced System Administrator" },
         { id: "specialist", name: "Specialist", col: 2, row: "lower", type: "credential", rule: { type: "any", codes: ["EX316", "EX336", "EX370", "EX430", "EX432", "EX282", "EX229", "EX480"] }, hint: "Pass any specialist exam" },
-        { id: "architect", name: "Architect", col: 3, row: "center", type: "meta", rule: { type: "metaPlus", requires: ["engineer"], specialist: ["EX316", "EX336", "EX370", "EX430", "EX432", "EX282", "EX229", "EX480"], minSpecialist: 3 }, hint: "Achieve Engineer + pass at least 3 specialist exams" },
+        { id: "architect", name: "Architect", col: 3, row: "center", type: "meta", rule: { type: "metaPlus", requires: ["engineer"], minSpecialist: 3 }, hint: "Achieve Engineer + pass at least 3 specialist exams" },
       ],
       edges: [
         ["tech", "sysadm"], ["tech", "advsysadm"],
@@ -67,7 +51,7 @@
         { id: "advsysadm", name: "Advanced System Administrator", col: 0, row: "lower", type: "credential", rule: { type: "all", codes: ["EX342"] }, hint: "Pass EX342" },
         { id: "engineer", name: "Engineer", col: 1, row: "upper", type: "meta", rule: { type: "meta", requires: ["sysadm", "advsysadm"] }, hint: "Achieve System Administrator + Advanced System Administrator" },
         { id: "specialist", name: "Specialist", col: 1, row: "lower", type: "credential", rule: { type: "any", codes: ["EX210", "EX260", "EX358", "EX362", "EX403", "EX415", "EX436", "EX442"] }, hint: "Pass any specialist exam" },
-        { id: "architect", name: "Architect", col: 2, row: "center", type: "meta", rule: { type: "metaPlus", requires: ["engineer"], specialist: ["EX210", "EX260", "EX358", "EX362", "EX403", "EX415", "EX436", "EX442"], minSpecialist: 3 }, hint: "Achieve Engineer + pass at least 3 specialist exams" },
+        { id: "architect", name: "Architect", col: 2, row: "center", type: "meta", rule: { type: "metaPlus", requires: ["engineer"], minSpecialist: 3 }, hint: "Achieve Engineer + pass at least 3 specialist exams" },
       ],
       edges: [
         ["sysadm", "engineer"], ["advsysadm", "engineer"],
@@ -93,7 +77,7 @@
         { id: "advsysadm", name: "Advanced System Administrator", col: 0, row: "lower", type: "credential", rule: { type: "all", codes: ["EX294"] }, hint: "Pass EX294" },
         { id: "engineer", name: "Engineer", col: 1, row: "upper", type: "meta", rule: { type: "meta", requires: ["sysadm", "advsysadm"] }, hint: "Achieve System Administrator + Advanced System Administrator" },
         { id: "specialist", name: "Specialist", col: 1, row: "lower", type: "credential", rule: { type: "any", codes: ["EX374", "EX417", "EX457", "EX467"] }, hint: "Pass any specialist exam" },
-        { id: "architect", name: "Architect", col: 2, row: "center", type: "meta", rule: { type: "metaPlus", requires: ["engineer"], specialist: ["EX374", "EX417", "EX457", "EX467"], minSpecialist: 3 }, hint: "Achieve Engineer + pass at least 3 specialist exams" },
+        { id: "architect", name: "Architect", col: 2, row: "center", type: "meta", rule: { type: "metaPlus", requires: ["engineer"], minSpecialist: 3 }, hint: "Achieve Engineer + pass at least 3 specialist exams" },
       ],
       edges: [
         ["sysadm", "engineer"], ["advsysadm", "engineer"],
@@ -115,7 +99,7 @@
         { id: "advdev", name: "Advanced Developer", col: 0, row: "lower", type: "credential", rule: { type: "all", codes: ["EX288"] }, hint: "Pass EX288" },
         { id: "engineer", name: "Engineer", col: 1, row: "upper", type: "meta", rule: { type: "meta", requires: ["dev", "advdev"] }, hint: "Achieve Developer + Advanced Developer" },
         { id: "specialist", name: "Specialist", col: 1, row: "lower", type: "credential", rule: { type: "any", codes: ["EX183", "EX221", "EX240", "EX248", "EX328", "EX378", "EX482"] }, hint: "Pass any specialist exam" },
-        { id: "architect", name: "Architect", col: 2, row: "center", type: "meta", rule: { type: "metaPlus", requires: ["engineer"], specialist: ["EX183", "EX221", "EX240", "EX248", "EX328", "EX378", "EX482"], minSpecialist: 3 }, hint: "Achieve Engineer + pass at least 3 specialist exams" },
+        { id: "architect", name: "Architect", col: 2, row: "center", type: "meta", rule: { type: "metaPlus", requires: ["engineer"], minSpecialist: 3 }, hint: "Achieve Engineer + pass at least 3 specialist exams" },
       ],
       edges: [
         ["dev", "engineer"], ["advdev", "engineer"],
@@ -145,14 +129,7 @@
     },
   ];
 
-  // Evaluate all nodes for a product in topological order
-  function evaluateProduct(product, p) {
-    const results = {};
-    for (const node of product.nodes) {
-      results[node.id] = evaluateLevel(node.rule, p, results);
-    }
-    return results;
-  }
+  bindArchitectSpecialists(PRODUCTS);
 
   // Pre-computed deduped list of all exams across products
   const ALL_EXAMS = (() => {
@@ -188,10 +165,12 @@
   }
 
   const STORAGE_KEY = "redhat-cert-map-passed";
+  const EXPIRY_KEY = "redhat-cert-map-expiry";
 
   // ── State ─────────────────────────────────────────────────────────────────
 
   let passedExams = new Set(loadState());
+  const examExpiry = new Map();
 
   function loadState() {
     try {
@@ -202,9 +181,43 @@
     }
   }
 
-  function saveState() {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify([...passedExams]));
+  function writeStorage(key, value) {
+    try {
+      localStorage.setItem(key, value);
+    } catch {
+      // Private mode and a full quota both throw. The page still updates.
+    }
   }
+
+  function loadExpiry() {
+    try {
+      const raw = localStorage.getItem(EXPIRY_KEY);
+      const obj = raw ? JSON.parse(raw) : {};
+      if (!obj || typeof obj !== "object" || Array.isArray(obj)) return;
+      Object.entries(obj).forEach(([code, expiry]) => {
+        if (typeof expiry === "string" && expiry && passedExams.has(code)) {
+          examExpiry.set(code, expiry);
+        }
+      });
+    } catch {
+      // A blocked or corrupt store leaves the map without dates.
+    }
+  }
+
+  function saveExpiry() {
+    const obj = {};
+    examExpiry.forEach((expiry, code) => {
+      if (passedExams.has(code)) obj[code] = expiry;
+    });
+    writeStorage(EXPIRY_KEY, JSON.stringify(obj));
+  }
+
+  function saveState() {
+    writeStorage(STORAGE_KEY, JSON.stringify([...passedExams]));
+    saveExpiry();
+  }
+
+  loadExpiry();
 
   // ── Exam Checklist Rendering ──────────────────────────────────────────────
 
@@ -219,18 +232,7 @@
 
   const renderedCheckboxes = new Map();
 
-  const LEVEL_ORDER = ["Technologist", "Developer", "Advanced Developer", "System Administrator", "Advanced System Administrator", "Engineer", "Specialist"];
-
-  function getExamLevel(examName) {
-    const lower = examName.toLowerCase();
-    if (lower.includes("technologist")) return "Technologist";
-    if (lower.includes("specialist")) return "Specialist";
-    if (lower.includes("advanced") && lower.includes("system administrator")) return "Advanced System Administrator";
-    if (lower.includes("system administrator")) return "System Administrator";
-    if (lower.includes("advanced") && lower.includes("developer")) return "Advanced Developer";
-    if (lower.includes("developer")) return "Developer";
-    return "Specialist";
-  }
+  const LEVEL_ORDER = ["Technologist", "Developer", "Advanced Developer", "System Administrator", "Advanced System Administrator", "Engineer", "Specialist", "Other"];
 
   function sortExams(exams) {
     return [...exams].sort((a, b) => {
@@ -259,6 +261,7 @@
         passedExams.add(exam.code);
       } else {
         passedExams.delete(exam.code);
+        examExpiry.delete(exam.code);
       }
       syncSharedCheckboxes(exam.code, cb.checked);
       saveState();
@@ -387,6 +390,7 @@
   // Clear all
   clearBtn.addEventListener("click", () => {
     passedExams.clear();
+    examExpiry.clear();
     saveState();
     document.querySelectorAll('#exam-list input[type="checkbox"]').forEach((cb) => {
       cb.checked = false;
@@ -672,15 +676,32 @@
         hoverCircle.setAttribute("r", s.nodeRadius + s.hoverExtra);
         hoverCircle.setAttribute("fill", "transparent");
         hoverCircle.setAttribute("stroke", "none");
+        hoverCircle.setAttribute("tabindex", "0");
+        hoverCircle.setAttribute("role", "button");
+        hoverCircle.setAttribute("focusable", "true");
+        hoverCircle.setAttribute("aria-label", `${product.name} ${node.name}. ${node.hint}`);
+        hoverCircle.setAttribute("aria-describedby", "tooltip");
+        hoverCircle.classList.add("level-hit");
         hoverCircle.style.cursor = "pointer";
-        hoverCircle.addEventListener("mouseenter", (e) => showTooltip(e, buildCircleTooltip(node, product)));
+        const showNodeTooltip = (e, anchor) => showTooltip(e, buildCircleTooltip(node, product), anchor);
+        hoverCircle.addEventListener("mouseenter", (e) => showNodeTooltip(e));
         hoverCircle.addEventListener("mousemove", (e) => moveTooltip(e));
         hoverCircle.addEventListener("mouseleave", hideTooltip);
+        hoverCircle.addEventListener("focus", () => showNodeTooltip(null, hoverCircle));
+        hoverCircle.addEventListener("blur", hideTooltip);
+        hoverCircle.addEventListener("keydown", (e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            showNodeTooltip(null, hoverCircle);
+          } else if (e.key === "Escape") {
+            hideTooltip();
+          }
+        });
         hoverCircle.addEventListener("touchstart", (e) => {
-          e.preventDefault();
-          showTooltip(e.touches[0], buildCircleTooltip(node, product));
+          if (!e.touches || !e.touches[0]) return;
+          showNodeTooltip(e.touches[0]);
           setTimeout(hideTooltip, 3000);
-        }, { passive: false });
+        }, { passive: true });
         svg.appendChild(hoverCircle);
 
         productRef.nodes[node.id] = { circle, fillRect, icon, text, tspanPartial, cy, nodeRadius: s.nodeRadius, type: node.type };
@@ -749,7 +770,7 @@
 
   // ── Tooltip ───────────────────────────────────────────────────────────────
 
-  function showTooltip(e, content) {
+  function showTooltip(e, content, anchor) {
     if (typeof content === "string") {
       tooltipEl.textContent = content;
     } else {
@@ -758,7 +779,51 @@
     }
     tooltipEl.classList.add("visible");
     tooltipEl.setAttribute("aria-hidden", "false");
-    moveTooltip(e);
+    moveTooltip(e, anchor);
+  }
+
+  function expiryDatesForCodes(codes) {
+    const dates = [];
+    codes.forEach((code) => {
+      if (passedExams.has(code) && examExpiry.has(code)) dates.push(examExpiry.get(code));
+    });
+    return dates;
+  }
+
+  function expiryDatesForNode(node, product) {
+    const rule = node.rule;
+    if (rule.codes) return expiryDatesForCodes(rule.codes);
+    if (!rule.requires) return [];
+    const dates = [];
+    rule.requires.forEach((reqId) => {
+      const reqNode = product.nodes.find((n) => n.id === reqId);
+      if (reqNode) dates.push(...expiryDatesForNode(reqNode, product));
+    });
+    return dates;
+  }
+
+  function appendExpiryBadges(row, dates) {
+    if (!dates.length) return;
+    const group = document.createElement("span");
+    group.className = "tooltip-expiry";
+    dates.forEach((expiry) => {
+      const badge = document.createElement("span");
+      const { status } = computeExpiresIn(expiry);
+      badge.className = "expires-badge expires-" + status;
+      badge.textContent = expiry;
+      group.appendChild(badge);
+    });
+    row.appendChild(group);
+  }
+
+  function appendCertRow(list, label, active, dates, nested) {
+    const row = document.createElement("div");
+    row.className = "tooltip-cert" + (nested ? " tooltip-cert-nested" : "") + (active ? "" : " tooltip-cert-pending");
+    const name = document.createElement("span");
+    name.textContent = label;
+    row.appendChild(name);
+    if (active) appendExpiryBadges(row, dates);
+    list.appendChild(row);
   }
 
   function buildCircleTooltip(node, product) {
@@ -771,77 +836,48 @@
     frag.appendChild(title);
 
     const ruleType = node.rule.type;
+    const examMap = {};
+    product.exams.forEach((ex) => { examMap[ex.code] = ex.name; });
 
-    if (ruleType === "meta") {
+    if (ruleType === "meta" || ruleType === "metaPlus") {
       const list = document.createElement("div");
-      list.style.fontSize = "0.82em";
+      list.className = "tooltip-certs";
       const results = evaluateProduct(product, passedExams);
       node.rule.requires.forEach((reqId) => {
         const reqNode = product.nodes.find((n) => n.id === reqId);
         if (!reqNode) return;
-        const row = document.createElement("div");
-        row.style.padding = "0.15em 0";
         const done = results[reqId].achieved;
         const icon = done ? "\u2705" : "\u274c";
-        row.textContent = `${icon} ${reqNode.name}`;
-        if (!done) row.style.opacity = "0.6";
-        list.appendChild(row);
+        appendCertRow(list, `${icon} ${reqNode.name}`, done, expiryDatesForNode(reqNode, product));
       });
-      frag.appendChild(list);
-    } else if (ruleType === "metaPlus") {
-      const list = document.createElement("div");
-      list.style.fontSize = "0.82em";
-      const results = evaluateProduct(product, passedExams);
-      node.rule.requires.forEach((reqId) => {
-        const reqNode = product.nodes.find((n) => n.id === reqId);
-        if (!reqNode) return;
-        const row = document.createElement("div");
-        row.style.padding = "0.15em 0";
-        const done = results[reqId].achieved;
-        const icon = done ? "\u2705" : "\u274c";
-        row.textContent = `${icon} ${reqNode.name}`;
-        if (!done) row.style.opacity = "0.6";
-        list.appendChild(row);
-      });
-      const specPassed = node.rule.specialist.filter((c) => passedExams.has(c)).length;
-      const specRow = document.createElement("div");
-      specRow.style.padding = "0.15em 0";
-      const specDone = specPassed >= node.rule.minSpecialist;
-      const specIcon = specDone ? "\u2705" : "\u274c";
-      specRow.textContent = `${specIcon} Specialist exams (${specPassed}/${node.rule.minSpecialist})`;
-      if (!specDone) specRow.style.opacity = "0.6";
-      list.appendChild(specRow);
-
-      const examMap = {};
-      product.exams.forEach((ex) => { examMap[ex.code] = ex.name; });
-      node.rule.specialist.forEach((code) => {
-        const row = document.createElement("div");
-        row.style.padding = "0.1em 0 0.1em 1em";
-        const passed = passedExams.has(code);
-        const icon = passed ? "\u2705" : "\u2B1C";
-        const name = examMap[code] || code;
-        row.textContent = `${icon} ${code} — ${name}`;
-        if (!passed) row.style.opacity = "0.5";
-        row.style.fontSize = "0.9em";
-        list.appendChild(row);
-      });
+      if (ruleType === "metaPlus") {
+        const specPassed = node.rule.specialist.filter((c) => passedExams.has(c)).length;
+        const specDone = specPassed >= node.rule.minSpecialist;
+        const specIcon = specDone ? "\u2705" : "\u274c";
+        appendCertRow(
+          list,
+          `${specIcon} Specialist exams (${specPassed}/${node.rule.minSpecialist})`,
+          specDone,
+          []
+        );
+        node.rule.specialist.forEach((code) => {
+          const passed = passedExams.has(code);
+          const icon = passed ? "\u2705" : "\u2B1C";
+          const name = examMap[code] || code;
+          appendCertRow(list, `${icon} ${code} — ${name}`, passed, expiryDatesForCodes([code]), true);
+        });
+      }
       frag.appendChild(list);
     } else {
       const codes = getNodeCodes(node, product);
       if (codes.length > 0) {
-        const examMap = {};
-        product.exams.forEach((ex) => { examMap[ex.code] = ex.name; });
         const list = document.createElement("div");
-        list.style.fontSize = "0.82em";
+        list.className = "tooltip-certs";
         codes.forEach((code) => {
-          const row = document.createElement("div");
-          row.style.padding = "0.15em 0";
           const passed = passedExams.has(code);
           const icon = passed ? "\u2705" : "\u274c";
           const name = examMap[code] || code;
-          row.textContent = `${icon} ${code} — ${name}`;
-          if (!passed) row.style.opacity = "0.6";
-          list.appendChild(row);
+          appendCertRow(list, `${icon} ${code} — ${name}`, passed, expiryDatesForCodes([code]));
         });
         frag.appendChild(list);
       }
@@ -850,16 +886,27 @@
     return frag;
   }
 
-  function moveTooltip(e) {
+  function moveTooltip(e, anchor) {
     const pad = 12;
-    let x = e.clientX + pad;
-    let y = e.clientY + pad;
+    let originX = 0;
+    let originY = 0;
+    const fromPointer = e && typeof e.clientX === "number" && (e.clientX !== 0 || e.clientY !== 0);
+    if (anchor) {
+      const box = anchor.getBoundingClientRect();
+      originX = box.left + box.width / 2;
+      originY = box.bottom;
+    } else if (fromPointer) {
+      originX = e.clientX;
+      originY = e.clientY;
+    }
+    let x = originX + pad;
+    let y = originY + pad;
     const rect = tooltipEl.getBoundingClientRect();
     if (x + rect.width > window.innerWidth - pad) {
-      x = e.clientX - rect.width - pad;
+      x = originX - rect.width - pad;
     }
     if (y + rect.height > window.innerHeight - pad) {
-      y = e.clientY - rect.height - pad;
+      y = originY - rect.height - pad;
     }
     tooltipEl.style.left = x + "px";
     tooltipEl.style.top = y + "px";
@@ -921,7 +968,6 @@
 
   function applyTheme(theme) {
     document.documentElement.setAttribute("data-theme", theme);
-    localStorage.setItem(THEME_KEY, theme);
     if (theme === "dark") {
       document.documentElement.classList.add("pf-v6-theme-dark");
       if (themeIcon) { themeIcon.className = "fas fa-moon"; }
@@ -929,11 +975,16 @@
       document.documentElement.classList.remove("pf-v6-theme-dark");
       if (themeIcon) { themeIcon.className = "fas fa-sun"; }
     }
+    writeStorage(THEME_KEY, theme);
   }
 
   function loadTheme() {
-    const saved = localStorage.getItem(THEME_KEY);
-    if (saved === "dark" || saved === "light") return saved;
+    try {
+      const saved = localStorage.getItem(THEME_KEY);
+      if (saved === "dark" || saved === "light") return saved;
+    } catch {
+      // Storage is unavailable; follow the system theme.
+    }
     return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
   }
 
@@ -982,8 +1033,9 @@
           return resp.text();
         })
         .then((text) => {
-          if (!text || text.length <= 200) return Promise.reject(new Error("too short"));
-          return text;
+          const doc = new DOMParser().parseFromString(text || "", "text/html");
+          if (!isRedHatVerifyDocument(doc)) return Promise.reject(new Error("not a verify page"));
+          return doc;
         })
         .catch((err) => {
           clearTimeout(timeoutId);
@@ -991,15 +1043,13 @@
         });
     });
 
-    let html;
+    let doc;
     try {
-      html = await Promise.any(attempts);
+      doc = await Promise.any(attempts);
       controllers.forEach((c) => c.abort());
     } catch {
       throw new Error("Failed to reach verification service (all proxies failed)");
     }
-
-    const doc = new DOMParser().parseFromString(html, "text/html");
 
     const bodyText = doc.body.textContent || "";
     if (bodyText.includes("is not a valid Certification ID")) {
@@ -1117,71 +1167,19 @@
     "red hat certified specialist in containers": "EX188",
   };
 
-  function normalizeCredName(name) {
-    return name.toLowerCase().replace(/\s*\([^)]*\)\s*/g, " ").replace(/\s+/g, " ").trim();
-  }
-
-  function wordSet(str) {
-    return new Set(str.split(/\s+/).filter((w) => w.length > 2));
-  }
-
-  function wordOverlap(a, b) {
-    const setA = wordSet(a);
-    const setB = wordSet(b);
-    if (setA.size === 0 || setB.size === 0) return 0;
-    let common = 0;
-    for (const w of setA) { if (setB.has(w)) common++; }
-    return common / Math.max(setA.size, setB.size);
-  }
-
-  function extractRole(normalized) {
-    const match = normalized.match(/certified\s+(\w+)/);
-    return match ? match[1] : null;
-  }
-
   function matchCredentialsToExams(credentials) {
-    const matched = new Set();
-    const unmatched = [];
-
-    for (const cred of credentials) {
-      const credName = typeof cred === "string" ? cred : cred.name;
-      const credNorm = normalizeCredName(credName);
-
-      const aliasCode = CREDENTIAL_ALIASES[credNorm];
-      if (aliasCode) { matched.add(aliasCode); continue; }
-
-      const exactMatch = ALL_EXAMS.find((e) => credNorm === normalizeCredName(e.name));
-      if (exactMatch) { matched.add(exactMatch.code); continue; }
-
-      const credRole = extractRole(credNorm);
-      const credWords = wordSet(credNorm);
-      let bestMatch = null;
-      let bestScore = 0;
-      for (const exam of ALL_EXAMS) {
-        const examNorm = normalizeCredName(exam.name);
-        const examRole = extractRole(examNorm);
-        if (credRole && examRole && credRole !== examRole) continue;
-        const examWords = wordSet(examNorm);
-        const allExamWordsInCred = [...examWords].every((w) => credWords.has(w));
-        if (!allExamWordsInCred) continue;
-        const score = wordOverlap(credNorm, examNorm);
-        if (score >= 0.7 && score > bestScore) {
-          bestScore = score;
-          bestMatch = exam.code;
-        }
-      }
-      if (bestMatch) {
-        matched.add(bestMatch);
-      } else {
-        unmatched.push(cred);
-      }
-    }
-    return { matched, unmatched };
+    return matchCredentialsAgainst(credentials, ALL_EXAMS, CREDENTIAL_ALIASES);
   }
 
-  function applyMatchedExams(matchedCodes) {
+  function applyMatchedExams(matchedCodes, expiryByCode) {
     passedExams.clear();
+    examExpiry.clear();
     matchedCodes.forEach((code) => passedExams.add(code));
+    if (expiryByCode) {
+      Object.entries(expiryByCode).forEach(([code, expiry]) => {
+        if (expiry && passedExams.has(code)) examExpiry.set(code, expiry);
+      });
+    }
     saveState();
 
     document.querySelectorAll('#exam-list input[type="checkbox"]').forEach((cb) => {
@@ -1355,34 +1353,8 @@
     verifySource.appendChild(sourceLink);
   }
 
-  // Whole phrase, so "ai" does not match inside "container" and
-  // "system administrator" can still be found inside the longer title.
-  function credentialContainsPhrase(text, phrase) {
-    if (!phrase) return false;
-    const escaped = phrase.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    return new RegExp("(?:^|[^a-z0-9])" + escaped + "(?:[^a-z0-9]|$)").test(text);
-  }
-
   function filterAchievedCredentials(unmatchedCreds) {
-    return unmatchedCreds.filter((cred) => {
-      const credNorm = normalizeCredName(cred.name || "");
-      for (const product of PRODUCTS) {
-        const productNorm = normalizeCredName(product.name);
-        if (!credentialContainsPhrase(credNorm, productNorm)) continue;
-
-        const results = evaluateProduct(product, passedExams);
-        const matchedNodes = product.nodes.filter((node) =>
-          credentialContainsPhrase(credNorm, normalizeCredName(node.name))
-        );
-        if (matchedNodes.length === 0) continue;
-
-        // Longest title wins, so an achieved "System Administrator" does not
-        // hide an unmatched "Advanced System Administrator" credential.
-        matchedNodes.sort((a, b) => b.name.length - a.name.length);
-        if (results[matchedNodes[0].id].achieved) return false;
-      }
-      return true;
-    });
+    return filterAchievedAgainst(unmatchedCreds, PRODUCTS, passedExams);
   }
 
   function handleVerifySuccess(doc, certId) {
@@ -1391,8 +1363,8 @@
       throw new Error("No current credentials found on the page");
     }
 
-    const { matched: matchedCodes, unmatched: unmatchedCreds } = matchCredentialsToExams(credentials);
-    applyMatchedExams(matchedCodes);
+    const { matched: matchedCodes, unmatched: unmatchedCreds, expiryByCode } = matchCredentialsToExams(credentials);
+    applyMatchedExams(matchedCodes, expiryByCode);
 
     renderOldCredentials(filterAchievedCredentials(unmatchedCreds));
 
@@ -1467,11 +1439,18 @@
     return window.innerWidth <= 992;
   }
 
+  function syncNavToggle() {
+    if (!navToggleBtn || !sidebarEl) return;
+    const expanded = sidebarEl.classList.contains("pf-m-expanded");
+    navToggleBtn.setAttribute("aria-expanded", expanded ? "true" : "false");
+  }
+
   function openSidebar() {
     if (sidebarEl) sidebarEl.classList.add("pf-m-expanded");
     if (pageEl) pageEl.classList.add("pf-m-sidebar-expanded");
     if (isMobile() && backdrop) backdrop.classList.add("visible");
-    localStorage.setItem("sidebar_expanded", "true");
+    writeStorage("sidebar_expanded", "true");
+    syncNavToggle();
     setTimeout(buildMap, 50);
   }
 
@@ -1479,7 +1458,8 @@
     if (sidebarEl) sidebarEl.classList.remove("pf-m-expanded");
     if (pageEl) pageEl.classList.remove("pf-m-sidebar-expanded");
     if (backdrop) backdrop.classList.remove("visible");
-    localStorage.setItem("sidebar_expanded", "false");
+    writeStorage("sidebar_expanded", "false");
+    syncNavToggle();
     setTimeout(buildMap, 50);
   }
 
@@ -1500,7 +1480,12 @@
   }
 
   (function () {
-    const savedState = localStorage.getItem("sidebar_expanded");
+    let savedState = null;
+    try {
+      savedState = localStorage.getItem("sidebar_expanded");
+    } catch {
+      savedState = null;
+    }
     if (savedState === "false") {
       if (sidebarEl) sidebarEl.classList.remove("pf-m-expanded");
       if (pageEl) pageEl.classList.remove("pf-m-sidebar-expanded");
@@ -1508,6 +1493,7 @@
       if (sidebarEl) sidebarEl.classList.remove("pf-m-expanded");
       if (pageEl) pageEl.classList.remove("pf-m-sidebar-expanded");
     }
+    syncNavToggle();
   })();
 
   // ── Init ──────────────────────────────────────────────────────────────────
