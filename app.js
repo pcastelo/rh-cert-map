@@ -392,6 +392,10 @@
       cb.checked = false;
     });
     updateMap();
+    verifyStatus.textContent = "";
+    verifyStatus.className = "cert-verify-status";
+    clearLookupResults();
+    clearCertIdParam();
   });
 
   // ── Certification Map Rendering (SVG) ─────────────────────────────────────
@@ -945,7 +949,7 @@
   const CORS_PROXIES = [
     { url: (u) => "https://proxy.corsfix.com/?url=" + u },
     { url: (u) => "https://corsproxy.io/?key=8a7b7619&url=" + encodeURIComponent(u) },
-    { url: (u) => "https://api.allorigins.win/raw?url=" + encodeURIComponent(u) },
+    { url: (u) => "https://api.allorigins.win/raw?url=" + u },
   ];
   const VERIFY_URL = "https://rhtapps.redhat.com/verify/?certId=";
 
@@ -1323,6 +1327,21 @@
   // "Verify" button: populates Certification Map from Current Credentials,
   // and Other Exams from Exam Transcript
 
+  function clearLookupResults() {
+    verifyOwner.textContent = "";
+    verifySource.textContent = "";
+    renderOldCredentials([]);
+    renderOtherExams([]);
+  }
+
+  function clearCertIdParam() {
+    const url = new URL(window.location.href);
+    if (!url.searchParams.has("certId") && !url.searchParams.has("certid")) return;
+    url.searchParams.delete("certId");
+    url.searchParams.delete("certid");
+    window.history.replaceState(null, "", url);
+  }
+
   function showVerifySource(certId) {
     const sourceUrl = "https://rhtapps.redhat.com/verify/?certId=" + certId.trim();
     verifySource.textContent = "";
@@ -1336,18 +1355,31 @@
     verifySource.appendChild(sourceLink);
   }
 
+  // Whole phrase, so "ai" does not match inside "container" and
+  // "system administrator" can still be found inside the longer title.
+  function credentialContainsPhrase(text, phrase) {
+    if (!phrase) return false;
+    const escaped = phrase.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    return new RegExp("(?:^|[^a-z0-9])" + escaped + "(?:[^a-z0-9]|$)").test(text);
+  }
+
   function filterAchievedCredentials(unmatchedCreds) {
     return unmatchedCreds.filter((cred) => {
       const credNorm = normalizeCredName(cred.name || "");
       for (const product of PRODUCTS) {
-        const productNorm = product.name.toLowerCase();
+        const productNorm = normalizeCredName(product.name);
+        if (!credentialContainsPhrase(credNorm, productNorm)) continue;
+
         const results = evaluateProduct(product, passedExams);
-        for (const node of product.nodes) {
-          const nodeNorm = node.name.toLowerCase();
-          if (credNorm.includes(nodeNorm) && credNorm.includes(productNorm)) {
-            if (results[node.id].achieved) return false;
-          }
-        }
+        const matchedNodes = product.nodes.filter((node) =>
+          credentialContainsPhrase(credNorm, normalizeCredName(node.name))
+        );
+        if (matchedNodes.length === 0) continue;
+
+        // Longest title wins, so an achieved "System Administrator" does not
+        // hide an unmatched "Advanced System Administrator" credential.
+        matchedNodes.sort((a, b) => b.name.length - a.name.length);
+        if (results[matchedNodes[0].id].achieved) return false;
       }
       return true;
     });
@@ -1382,15 +1414,14 @@
   verifyBtn.addEventListener("click", async () => {
     const certId = certIdInput.value;
     if (certId) {
-      const url = new URL(window.location);
+      const url = new URL(window.location.href);
       url.searchParams.set("certId", certId);
+      url.searchParams.delete("certid");
       window.history.replaceState(null, "", url);
     }
     verifyStatus.textContent = "Fetching certifications...";
     verifyStatus.className = "cert-verify-status loading";
-    verifyOwner.textContent = "";
-    verifySource.textContent = "";
-    oldCredsSection.hidden = true;
+    clearLookupResults();
     verifyBtn.disabled = true;
 
     try {
@@ -1399,10 +1430,9 @@
       showVerifySource(certId);
       handleVerifySuccess(doc, certId);
     } catch (err) {
+      clearLookupResults();
       verifyStatus.textContent = err.message;
       verifyStatus.className = "cert-verify-status error";
-      verifyOwner.textContent = "";
-      verifySource.textContent = "";
     } finally {
       verifyBtn.disabled = false;
     }
