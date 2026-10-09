@@ -96,7 +96,14 @@
       var credNorm = normalizeCredName(credName);
 
       var aliasCode = aliasMap[credNorm];
-      if (aliasCode) { remember(aliasCode, cred); return; }
+      if (aliasCode) {
+        if (Array.isArray(aliasCode)) {
+          aliasCode.forEach(function (code) { remember(code, cred); });
+        } else {
+          remember(aliasCode, cred);
+        }
+        return;
+      }
 
       var exactMatch = examList.find(function (exam) {
         return credNorm === normalizeCredName(exam.name);
@@ -165,6 +172,25 @@
     return "Other";
   }
 
+  function mergeTranscriptCodes(transcriptMatched, credentialMatchedCodes, credentialExpiryByCode, transcriptExams) {
+    var codes = new Set(credentialMatchedCodes);
+    transcriptMatched.forEach(function (code) {
+      if (credentialMatchedCodes.has(code)) codes.add(code);
+    });
+
+    var expiryByCode = {};
+    Object.keys(credentialExpiryByCode || {}).forEach(function (code) {
+      expiryByCode[code] = credentialExpiryByCode[code];
+    });
+    (transcriptExams || []).forEach(function (exam) {
+      if (codes.has(exam.code) && !expiryByCode[exam.code] && exam.date) {
+        expiryByCode[exam.code] = exam.date;
+      }
+    });
+
+    return { codes: codes, expiryByCode: expiryByCode };
+  }
+
   function isRedHatVerifyDocument(doc) {
     if (!doc || !doc.body) return false;
     var bodyText = doc.body.textContent || "";
@@ -198,6 +224,7 @@
     credentialContainsPhrase: credentialContainsPhrase,
     filterAchievedCredentials: filterAchievedCredentials,
     getExamLevel: getExamLevel,
+    mergeTranscriptCodes: mergeTranscriptCodes,
     isRedHatVerifyDocument: isRedHatVerifyDocument,
   };
 })(typeof window !== "undefined" ? window : globalThis);

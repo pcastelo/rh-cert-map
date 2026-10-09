@@ -82,6 +82,19 @@
       check("alias maps to its exam code", Array.from(aliasMatch.matched), ["EX294"]);
       check("a name-only credential has no expiry", aliasMatch.expiryByCode, {});
 
+      // --- Multi-code alias tests (TDD: should fail until cert-logic.js supports arrays) ---
+      var multiAliases = {
+        "red hat certified engineer in enterprise linux": ["EX200", "EX342"],
+      };
+      var multiMatch = CL.matchCredentialsToExams(
+        [{ name: "Red Hat Certified Engineer in Enterprise Linux", expiry: "June 15, 2027" }],
+        exams,
+        multiAliases
+      );
+      var multiSorted = Array.from(multiMatch.matched).sort();
+      check("multi-code alias expands to all codes", multiSorted, ["EX200", "EX342"]);
+      check("multi-code alias propagates expiry to each code", multiMatch.expiryByCode, { EX200: "June 15, 2027", EX342: "June 15, 2027" });
+
       var dated = CL.matchCredentialsToExams(
         [
           { name: "Red Hat Certified Developer in AI", expiry: "September 1, 2028" },
@@ -104,6 +117,26 @@
         new Set(["EX267"])
       );
       check("containers credential is not treated as AI", containers.length, 1);
+
+      // --- mergeTranscriptCodes tests ---
+      if (typeof CL.mergeTranscriptCodes !== "function") {
+        check("mergeTranscriptCodes is exported", false, true);
+      } else {
+        var credMatched = new Set(["EX200", "EX280"]);
+        var transcriptMatched = new Set(["EX200", "EX280", "EX370"]);
+        var credExpiry = { EX200: "June 15, 2027" };
+        var transcriptExams = [
+          { code: "EX200", name: "RHCSA exam", date: "June 15, 2024" },
+          { code: "EX280", name: "OpenShift admin exam", date: "Sep 15, 2023" },
+          { code: "EX370", name: "Enterprise Kubernetes exam", date: "Mar 10, 2023" },
+        ];
+        var merged = CL.mergeTranscriptCodes(transcriptMatched, credMatched, credExpiry, transcriptExams);
+        var mergedCodesSorted = Array.from(merged.codes).sort();
+        check("mergeTranscriptCodes keeps only credential-backed codes", mergedCodesSorted, ["EX200", "EX280"]);
+        check("mergeTranscriptCodes excludes transcript-only codes (expired)", merged.codes.has("EX370"), false);
+        check("mergeTranscriptCodes keeps credential expiry for EX200", merged.expiryByCode.EX200, "June 15, 2027");
+        check("mergeTranscriptCodes uses transcript date as fallback for EX280", merged.expiryByCode.EX280, "Sep 15, 2023");
+      }
 
       check("unknown exam title is its own group", CL.getExamLevel("Red Hat Certified Explorer in Satellite"), "Other");
       check("specialist titles stay specialists", CL.getExamLevel("Red Hat Certified Specialist in Containers"), "Specialist");

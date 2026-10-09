@@ -8,6 +8,7 @@
     matchCredentialsToExams: matchCredentialsAgainst,
     filterAchievedCredentials: filterAchievedAgainst,
     getExamLevel,
+    mergeTranscriptCodes,
     isRedHatVerifyDocument,
   } = window.CertLogic;
 
@@ -1165,6 +1166,10 @@
     "red hat certified specialist in openshift administration": "EX280",
     "red hat certified specialist in containers and kubernetes": "EX180",
     "red hat certified specialist in containers": "EX188",
+    "red hat certified engineer in enterprise linux": ["EX200", "EX342"],
+    "red hat certified engineer in cloud-native applications": ["EX188", "EX288"],
+    "red hat certified engineer in ansible": ["EX200", "EX294"],
+    "red hat certified system administrator in enterprise linux": "EX200",
   };
 
   function matchCredentialsToExams(credentials) {
@@ -1364,21 +1369,22 @@
     }
 
     const { matched: matchedCodes, unmatched: unmatchedCreds, expiryByCode } = matchCredentialsToExams(credentials);
-    applyMatchedExams(matchedCodes, expiryByCode);
-
-    renderOldCredentials(filterAchievedCredentials(unmatchedCreds));
 
     const transcriptExams = extractExamTranscript(doc);
-    const { unmatched } = matchExamCodes(transcriptExams);
-    renderOtherExams(unmatched);
+    const { matched: transcriptMatchedCodes, unmatched: transcriptUnmatched } = matchExamCodes(transcriptExams);
 
-    const matchedCount = matchedCodes.size;
-    const total = credentials.length;
-    if (matchedCount === 0) {
-      verifyStatus.textContent = `Found ${total} credential(s) but none matched known exams`;
+    const merged = mergeTranscriptCodes(transcriptMatchedCodes, matchedCodes, expiryByCode, transcriptExams);
+    applyMatchedExams(merged.codes, merged.expiryByCode);
+
+    renderOldCredentials(filterAchievedCredentials(unmatchedCreds));
+    renderOtherExams(transcriptUnmatched);
+
+    const totalExams = merged.codes.size;
+    if (totalExams === 0) {
+      verifyStatus.textContent = `Found ${credentials.length} credential(s) but none matched known exams`;
       verifyStatus.className = "cert-verify-status error";
     } else {
-      verifyStatus.textContent = `Matched ${matchedCount} of ${total} current credential(s)`;
+      verifyStatus.textContent = `Matched ${totalExams} exam(s) from credentials and transcript`;
       verifyStatus.className = "cert-verify-status success";
     }
   }
