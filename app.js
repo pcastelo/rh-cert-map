@@ -1169,6 +1169,7 @@
     "red hat certified engineer in enterprise linux": ["EX200", "EX342"],
     "red hat certified engineer in cloud-native applications": ["EX188", "EX288"],
     "red hat certified engineer in ansible": ["EX200", "EX294"],
+    "red hat certified engineer in openshift": ["EX280", "EX380"],
     "red hat certified system administrator in enterprise linux": "EX200",
   };
 
