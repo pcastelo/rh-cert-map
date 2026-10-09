@@ -42,7 +42,7 @@
           { id: "sysadm", name: "System Administrator", rule: { type: "all", codes: ["EX200"] } },
           { id: "advsysadm", name: "Advanced System Administrator", rule: { type: "all", codes: ["EX342"] } },
           { id: "engineer", name: "Engineer", rule: { type: "meta", requires: ["sysadm", "advsysadm"] } },
-          { id: "specialist", name: "Specialist", rule: { type: "any", codes: ["EX210", "EX442"] } },
+          { id: "specialist", name: "Specialist", rule: { type: "any", codes: ["EX210", "EX442", "EX280"] } },
           { id: "architect", name: "Architect", rule: { type: "metaPlus", requires: ["engineer"], minSpecialist: 3 } },
         ],
       }, {
@@ -52,7 +52,7 @@
         ],
       }];
       CL.bindArchitectSpecialists(products);
-      check("architect specialist list comes from the specialist node", products[0].nodes[4].rule.specialist, ["EX210", "EX442"]);
+      check("architect specialist list comes from the specialist node", products[0].nodes[4].rule.specialist, ["EX210", "EX442", "EX280"]);
 
       var exams = [
         { code: "EX267", name: "Red Hat Certified Developer in AI" },
@@ -117,6 +117,71 @@
         new Set(["EX267"])
       );
       check("containers credential is not treated as AI", containers.length, 1);
+
+      // --- findMismatchedNodes tests (TDD: should fail until cert-logic.js supports it) ---
+      if (typeof CL.findMismatchedNodes !== "function") {
+        check("findMismatchedNodes is exported", false, true);
+      } else {
+        var architectName = "Red Hat Certified Architect in Enterprise Linux";
+        var architectNotAchieved = CL.findMismatchedNodes(
+          [{ name: architectName }],
+          products,
+          new Set()
+        );
+        check(
+          "unachieved meta/metaPlus node with matching credential is flagged",
+          Array.from(architectNotAchieved),
+          ["Enterprise Linux:architect"]
+        );
+
+        var engineerName = "Red Hat Certified Engineer in Enterprise Linux";
+        var engineerAchieved = CL.findMismatchedNodes(
+          [{ name: engineerName }],
+          products,
+          new Set(["EX200", "EX342"])
+        );
+        check(
+          "already-achieved meta node is never flagged",
+          Array.from(engineerAchieved),
+          []
+        );
+
+        var noMatch = CL.findMismatchedNodes(
+          [{ name: "Red Hat Certified Specialist in Containers" }],
+          products,
+          new Set(["EX267"])
+        );
+        check(
+          "credential naming no node yields no mismatch",
+          Array.from(noMatch),
+          []
+        );
+
+        var nonMetaUnmatched = CL.findMismatchedNodes(
+          [{ name: advancedName }],
+          products,
+          new Set(["EX200"])
+        );
+        check(
+          "unmatched credential-type node (not meta/metaPlus) is never flagged",
+          Array.from(nonMetaUnmatched),
+          []
+        );
+
+        // Literal spec.md scenario: metaPlus node achieved via exams, same-named
+        // credential also present -> must not be flagged (adversarial-review gap fix).
+        var architectAchievedExams = new Set(["EX200", "EX342", "EX210", "EX442", "EX280"]);
+        var architectAchieved = CL.findMismatchedNodes(
+          [{ name: architectName }],
+          products,
+          architectAchievedExams
+        );
+        check(
+          "already-achieved metaPlus (Architect) node is never flagged",
+          Array.from(architectAchieved),
+          []
+        );
+      }
 
       // --- mergeTranscriptCodes tests ---
       if (typeof CL.mergeTranscriptCodes !== "function") {

@@ -139,26 +139,63 @@
     return new RegExp("(?:^|[^a-z0-9])" + escaped + "(?:[^a-z0-9]|$)").test(text);
   }
 
+  // Shared by filterAchievedCredentials and findMismatchedNodes: resolves a
+  // normalized credential name to the single node within `product` it names
+  // (e.g. "Architect in Enterprise Linux" -> the Architect node), preferring
+  // the longest-named node when more than one node name appears in the text.
+  function resolveCredentialNodeForProduct(credNorm, product) {
+    var productNorm = normalizeCredName(product.name);
+    if (!credentialContainsPhrase(credNorm, productNorm)) return null;
+
+    var matchedNodes = product.nodes.filter(function (node) {
+      return credentialContainsPhrase(credNorm, normalizeCredName(node.name));
+    });
+    if (matchedNodes.length === 0) return null;
+
+    matchedNodes.sort(function (a, b) { return b.name.length - a.name.length; });
+    return matchedNodes[0];
+  }
+
   function filterAchievedCredentials(unmatchedCreds, products, passedExams) {
     var passed = passedExams instanceof Set ? passedExams : new Set(passedExams || []);
-    return unmatchedCreds.filter(function (cred) {
+    return (unmatchedCreds || []).filter(function (cred) {
       var credNorm = normalizeCredName(cred.name || "");
       for (var p = 0; p < products.length; p++) {
         var product = products[p];
-        var productNorm = normalizeCredName(product.name);
-        if (!credentialContainsPhrase(credNorm, productNorm)) continue;
+        var node = resolveCredentialNodeForProduct(credNorm, product);
+        if (!node) continue;
 
         var results = evaluateProduct(product, passed);
-        var matchedNodes = product.nodes.filter(function (node) {
-          return credentialContainsPhrase(credNorm, normalizeCredName(node.name));
-        });
-        if (matchedNodes.length === 0) continue;
-
-        matchedNodes.sort(function (a, b) { return b.name.length - a.name.length; });
-        if (results[matchedNodes[0].id].achieved) return false;
+        if (results[node.id].achieved) return false;
       }
       return true;
     });
+  }
+
+  // For meta/metaPlus nodes (Engineer, Architect) only: flags "<product
+  // name>:<node id>" when a Current Credential names that node but the
+  // node's own rule does not evaluate to achieved from matched exams alone.
+  // Red Hat sometimes grants these levels via legacy paths the site cannot
+  // reconstruct; this surfaces that gap without changing passedExams or
+  // which credentials appear in Active Legacy Credentials.
+  function findMismatchedNodes(unmatchedCreds, products, passedExams) {
+    var passed = passedExams instanceof Set ? passedExams : new Set(passedExams || []);
+    var mismatched = new Set();
+    (unmatchedCreds || []).forEach(function (cred) {
+      var credNorm = normalizeCredName(cred.name || "");
+      for (var p = 0; p < products.length; p++) {
+        var product = products[p];
+        var node = resolveCredentialNodeForProduct(credNorm, product);
+        if (!node) continue;
+        if (node.rule.type !== "meta" && node.rule.type !== "metaPlus") continue;
+
+        var results = evaluateProduct(product, passed);
+        if (!results[node.id].achieved) {
+          mismatched.add(product.name + ":" + node.id);
+        }
+      }
+    });
+    return mismatched;
   }
 
   function getExamLevel(examName) {
@@ -223,6 +260,7 @@
     matchCredentialsToExams: matchCredentialsToExams,
     credentialContainsPhrase: credentialContainsPhrase,
     filterAchievedCredentials: filterAchievedCredentials,
+    findMismatchedNodes: findMismatchedNodes,
     getExamLevel: getExamLevel,
     mergeTranscriptCodes: mergeTranscriptCodes,
     isRedHatVerifyDocument: isRedHatVerifyDocument,

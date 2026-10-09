@@ -7,6 +7,7 @@
     normalizeCredName,
     matchCredentialsToExams: matchCredentialsAgainst,
     filterAchievedCredentials: filterAchievedAgainst,
+    findMismatchedNodes: findMismatchedNodesAgainst,
     getExamLevel,
     mergeTranscriptCodes,
     isRedHatVerifyDocument,
@@ -172,6 +173,9 @@
 
   let passedExams = new Set(loadState());
   const examExpiry = new Map();
+  // "<productName>:<nodeId>" keys for meta/metaPlus nodes a Current
+  // Credential names but that aren't achieved from matched exams alone.
+  let mismatchedNodeKeys = new Set();
 
   function loadState() {
     try {
@@ -396,6 +400,7 @@
     document.querySelectorAll('#exam-list input[type="checkbox"]').forEach((cb) => {
       cb.checked = false;
     });
+    mismatchedNodeKeys = new Set();
     updateMap();
     verifyStatus.textContent = "";
     verifyStatus.className = "cert-verify-status";
@@ -737,11 +742,13 @@
         const nRef = ref.nodes[node.id];
         if (!nRef) return;
         const ev = results[node.id];
-        const isPartial = !ev.achieved && ev.progress > 0 && ev.progress < 1;
+        const isMismatched = !ev.achieved && mismatchedNodeKeys.has(product.name + ":" + node.id);
+        const isPartial = !ev.achieved && !isMismatched && ev.progress > 0 && ev.progress < 1;
 
         nRef.circle.classList.toggle("achieved", ev.achieved);
         nRef.circle.classList.toggle("partial", isPartial);
-        nRef.circle.classList.toggle("not-achieved", !ev.achieved && !isPartial);
+        nRef.circle.classList.toggle("not-achieved", !ev.achieved && !isPartial && !isMismatched);
+        nRef.circle.classList.toggle("credential-mismatch", isMismatched);
 
         // Partial fill (credential nodes only)
         if (nRef.fillRect) {
@@ -762,6 +769,7 @@
         // Label classes
         nRef.text.classList.toggle("achieved", ev.achieved);
         nRef.text.classList.toggle("partial", isPartial);
+        nRef.text.classList.toggle("credential-mismatch", isMismatched);
 
         nRef.tspanPartial.style.display = isPartial ? "" : "none";
       });
@@ -835,6 +843,14 @@
     title.style.marginBottom = "0.4em";
     title.textContent = node.hint;
     frag.appendChild(title);
+
+    if (mismatchedNodeKeys.has(product.name + ":" + node.id)) {
+      const mismatchNote = document.createElement("div");
+      mismatchNote.className = "tooltip-mismatch-note";
+      mismatchNote.textContent =
+        "A Current Credential names this level, but it can't be confirmed from matched exams — likely a legacy/grandfathered award path.";
+      frag.appendChild(mismatchNote);
+    }
 
     const ruleType = node.rule.type;
     const examMap = {};
@@ -1375,9 +1391,17 @@
     const { matched: transcriptMatchedCodes, unmatched: transcriptUnmatched } = matchExamCodes(transcriptExams);
 
     const merged = mergeTranscriptCodes(transcriptMatchedCodes, matchedCodes, expiryByCode, transcriptExams);
-    applyMatchedExams(merged.codes, merged.expiryByCode);
 
-    renderOldCredentials(filterAchievedCredentials(unmatchedCreds));
+    // Computed from merged.codes (not the shared passedExams Set) so this is
+    // correct *before* applyMatchedExams runs below — applyMatchedExams calls
+    // updateMap() internally too, and that internal call must already see the
+    // final mismatch state, not a stale one from a previous verify/Clear All.
+    const filteredOldCredentials = filterAchievedCredentials(unmatchedCreds);
+    mismatchedNodeKeys = findMismatchedNodesAgainst(unmatchedCreds, PRODUCTS, merged.codes);
+
+    applyMatchedExams(merged.codes, merged.expiryByCode); // also calls updateMap() with the final state above
+
+    renderOldCredentials(filteredOldCredentials);
     renderOtherExams(transcriptUnmatched);
 
     const totalExams = merged.codes.size;

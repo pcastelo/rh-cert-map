@@ -649,6 +649,26 @@ html:not(.pf-v6-theme-dark) .cert-input {
     animation: badgeGlowGold 2.5s ease-in-out infinite;
 }
 
+/* Credential mismatch: a Current Credential names this Engineer/Architect
+   level, but it isn't achieved from matched exams alone (likely a legacy
+   award path). Distinct from achieved (red/gold), partial (amber) and
+   not-achieved (neutral) states; same color on both light and dark themes. */
+.level-node.credential-mismatch {
+    fill: #8a3ffc;
+    stroke: #6929c4;
+}
+
+.level-label.credential-mismatch {
+    fill: #8a3ffc;
+    font-weight: 500;
+}
+
+.tooltip-mismatch-note {
+    color: #8a3ffc;
+    font-size: 0.82em;
+    margin-bottom: 0.4em;
+}
+
 @keyframes badgeGlow {
     0% {
         fill: #ee0000;
